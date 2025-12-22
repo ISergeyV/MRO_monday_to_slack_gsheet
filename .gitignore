@@ -1,17 +1,30 @@
 
-# Environment variables
+# --- Environment & Credentials ---
+# Ignore environment files containing secrets.
 .env
+.env.*
+!/.env.example
 
-# Google credentials
+# Ignore the specific Google credentials file.
+# Avoid using a broad pattern like `*.json`.
 credentials.json
-*.json
 
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
+# --- Python ---
+# Ignore virtual environment directories.
 .venv/
 venv/
 env/
-.env.*
-!/.env.example
+
+# Ignore Python cache files and directories.
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Application Specific ---
+# Ignore the state file that tracks migration progress.
+migration_state.txt
+
+# --- OS & IDE Specific ---
+.DS_Store
+.vscode/
+.idea/
