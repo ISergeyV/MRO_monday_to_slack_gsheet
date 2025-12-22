@@ -22,7 +22,7 @@ import io
 # Provides a high-level interface for asynchronously executing callables.
 import concurrent.futures
 # Python Imaging Library, used here for opening and compressing images.
-from PIL import Image
+from PIL import Image, ImageOps
 # Client for interacting with the Slack Web API.
 from slack_sdk import WebClient
 # Exception class for Slack API errors.
@@ -233,6 +233,9 @@ def compress_image(file_content, filename, target_size_mb=1.0):
             return file_content, filename
 
         img = Image.open(io.BytesIO(file_content))
+
+        # Fix orientation based on EXIF data (prevents rotated images).
+        img = ImageOps.exif_transpose(img)
 
         # Process only JPEG and PNG files.
         if img.format not in ['JPEG', 'PNG']:
