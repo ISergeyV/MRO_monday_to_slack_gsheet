@@ -88,14 +88,8 @@ def main():
             try:
                 # 4. Process each item
                 # Use a generator to get items one by one.
-                for current_item_num, item in enumerate(monday_service.fetch_monday_items_generator(), start=1):
-
-                    # Skip items that have already been processed.
-                    if current_item_num < START_ITEM:
-                        if current_item_num % 200 == 0:
-                            logging.info(
-                                f"Skipping processed items... (current #{current_item_num})")
-                        continue
+                # Pass START_ITEM to generator to handle skipping efficiently
+                for current_item_num, item in enumerate(monday_service.fetch_monday_items_generator(start_item=START_ITEM), start=START_ITEM):
 
                     item_name = item.get('name')
                     assets = item.get('assets', [])

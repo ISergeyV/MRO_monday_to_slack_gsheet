@@ -8,25 +8,31 @@ class CursorExpiredException(Exception):
     pass
 
 
-def fetch_monday_page(cursor=None):
+def fetch_monday_page(cursor=None, include_assets=True):
     variables = {}
-    if cursor:
-        query = """
-        query ($cursor: String!) {
-          next_items_page (cursor: $cursor, limit: 25) {
-            cursor
-            items {
-              id
-              name
+
+    # Запрашиваем assets только если они нужны (экономия трафика при пропуске)
+    assets_query = """
               assets {
                 id
                 name
                 public_url
                 file_extension
               }
-            }
-          }
-        }
+    """ if include_assets else ""
+
+    if cursor:
+        query = f"""
+        query ($cursor: String!) {{
+          next_items_page (cursor: $cursor, limit: 25) {{
+            cursor
+            items {{
+              id
+              name
+              {assets_query}
+            }}
+          }}
+        }}
         """
         variables['cursor'] = cursor
     else:
@@ -38,12 +44,7 @@ def fetch_monday_page(cursor=None):
               items {{
                 id
                 name
-                assets {{
-                  id
-                  name
-                  public_url
-                  file_extension
-                }}
+                {assets_query}
               }}
             }}
           }}
@@ -92,13 +93,24 @@ def fetch_monday_page(cursor=None):
     return [], None
 
 
-def fetch_monday_items_generator():
+def fetch_monday_items_generator(start_item=1):
     cursor = None
+    items_processed = 0
+
     while True:
-        items, cursor = fetch_monday_page(cursor)
+        # Если мы еще далеко от start_item, не запрашиваем assets (быстрая перемотка)
+        # +25 с запасом, так как страница может быть неполной
+        include_assets = (items_processed + 25 >= start_item)
+
+        items, cursor = fetch_monday_page(
+            cursor, include_assets=include_assets)
+
         if items:
-            logging.info(f"Fetched a page containing {len(items)} items.")
+            logging.info(
+                f"Fetched page with {len(items)} items. (Processed so far: {items_processed})")
             for item in items:
-                yield item
+                items_processed += 1
+                if items_processed >= start_item:
+                    yield item
         if not cursor:
             break
