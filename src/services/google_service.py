@@ -85,6 +85,21 @@ def get_existing_ids(service):
         return {}
 
 
+def get_all_rows(service):
+    """Retrieves all rows to process URLs."""
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=config.SHEET_ID,
+            range='A:E'  # Assuming URL is in column E (index 4)
+        ).execute()
+        rows = result.get('values', [])
+        # Return raw rows including header to maintain correct row indices
+        return rows
+    except Exception as e:
+        logging.error(f"Error retrieving rows: {e}")
+        return []
+
+
 def _execute_with_retry(request):
     """Executes a Google API request with exponential backoff for rate limits."""
     for attempt in range(5):
@@ -163,3 +178,19 @@ def sync_batch(service, batch_data, existing_ids):
 
     except Exception as e:
         logging.error(f"Error syncing batch to Google Sheet: {e}")
+
+
+def update_cell_link(service, row_num, link):
+    """Updates column F (index 5) of a specific row with the provided link."""
+    try:
+        range_name = f"F{row_num}"
+        body = {'values': [[link]]}
+        service.spreadsheets().values().update(
+            spreadsheetId=config.SHEET_ID,
+            range=range_name,
+            valueInputOption="RAW",
+            body=body
+        ).execute()
+        logging.info(f"Updated Sheet row {row_num} (Col F) with link.")
+    except Exception as e:
+        logging.error(f"Failed to update sheet row {row_num}: {e}")

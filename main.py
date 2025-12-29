@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time  # Provides various time-related functions, including sleep.
+import os
 import logging
 import concurrent.futures
 import argparse
@@ -12,6 +13,7 @@ from src.utils import common as utils
 from src.services import monday_service
 from src.services import google_service
 from src.services import slack_service
+from src.services import playwright_service
 
 # Configure the logging system to output messages to the console.
 # The format includes the timestamp, the log level (INFO, ERROR, etc.), and the actual message.
@@ -93,6 +95,10 @@ def main():
                         help="Enable debug logging.")
     parser.add_argument('--url', action='store_true',
                         help="Only collect Monday Doc URLs without downloading content.")
+    parser.add_argument('--auth', action='store_true',
+                        help="Run browser authentication to save session state.")
+    parser.add_argument('--browser-export', action='store_true',
+                        help="Use Playwright to export Markdown from collected URLs in Google Sheet.")
     args = parser.parse_args()
 
     # Set logging level based on the --debug flag
@@ -101,6 +107,13 @@ def main():
 
     # Load the item number to start from.
     START_ITEM = utils.load_state()
+
+    # --- Special Mode: Browser Authentication ---
+    if args.auth:
+        logging.info("Starting Browser Authentication Mode...")
+        with playwright_service.PlaywrightService(headless=False) as ps:
+            ps.authenticate()
+        return
 
     logging.info("--- Starting Migration Script ---")
 
@@ -114,6 +127,63 @@ def main():
 
     # Create the Sheets service once (used only in the main thread).
     sheets_service = build('sheets', 'v4', credentials=creds)
+
+    # --- Special Mode: Browser Export from Sheet ---
+    if args.browser_export:
+        logging.info(
+            "Starting Browser Export Mode (using URLs from Google Sheet)...")
+
+        # Create Drive service
+        drive_service = build('drive', 'v3', credentials=creds)
+
+        rows = google_service.get_all_rows(sheets_service)
+        logging.info(f"Found {len(rows)} rows in Google Sheet.")
+
+        # Initialize Playwright Service
+        # Using headless=False to allow visual debugging as requested
+        with playwright_service.PlaywrightService(headless=False) as ps:
+            for i, row in enumerate(rows):
+                # Skip header row if present
+                if i == 0 and row and row[0].lower() == 'name':
+                    continue
+
+                # Row structure: [Name, ID, Date, DriveLinks, DocURL]
+                # Check if row has enough columns
+                if len(row) < 5:
+                    continue
+
+                item_name = row[0]
+                item_id = row[1]
+                doc_url = row[4]
+
+                if not doc_url or "monday.com/docs" not in doc_url:
+                    continue
+
+                logging.info(f"Processing Item #{item_id}: {item_name}")
+
+                # Download MD
+                file_path = ps.download_markdown(doc_url)
+
+                if file_path:
+                    # Read file content
+                    with open(file_path, 'rb') as f:
+                        content = f.read()
+
+                    # Upload to Drive
+                    original_filename = os.path.basename(file_path)
+                    link = google_service.upload_to_drive(
+                        drive_service, content, item_name, original_filename)
+
+                    if link:
+                        logging.info(f"Uploaded exported doc to Drive: {link}")
+                        # Update sheet with new link in Column F
+                        # Row index in Sheets is 1-based, so i + 1
+                        google_service.update_cell_link(
+                            sheets_service, i + 1, link)
+
+                    # Cleanup
+                    os.remove(file_path)
+        return
 
     # Load existing IDs once before starting.
     logging.info("Loading list of existing IDs from the sheet...")

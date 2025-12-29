@@ -28,3 +28,6 @@ migration_state.txt
 .DS_Store
 .vscode/
 .idea/
+auth.json
+error_screenshot*
+temp_dev/
