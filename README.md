@@ -101,3 +101,20 @@ python main.py
 ```
 
 The script will fetch the last 50 items from Monday.com, process the assets, upload them to Google Drive, and send notifications to Slack and Google Sheets.
+
+По умолчанию (все вместе):
+
+bash
+python main.py
+или
+
+bash
+python main.py --mode all
+Только документы (monday_doc3):
+
+bash
+python main.py --mode docs
+Только файлы (как было раньше):
+
+bash
+python main.py --mode files

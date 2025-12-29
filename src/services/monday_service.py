@@ -8,7 +8,7 @@ class CursorExpiredException(Exception):
     pass
 
 
-def fetch_monday_page(cursor=None, include_assets=True):
+def fetch_monday_page(cursor=None, include_assets=True, include_docs=False, include_docs_content=True):
     variables = {}
 
     # Запрашиваем assets только если они нужны (экономия трафика при пропуске)
@@ -21,6 +21,33 @@ def fetch_monday_page(cursor=None, include_assets=True):
               }
     """ if include_assets else ""
 
+    doc_blocks_query = """
+                    doc {
+                      blocks {
+                        id
+                        type
+                        content
+                      }
+                    }
+    """ if include_docs_content else ""
+
+    # Запрашиваем monday_doc3 только если нужно
+    docs_query = """
+              column_values (ids: ["monday_doc3"]) {
+                id
+                type
+                text
+                value
+                ... on DocValue {
+                  file {
+                    object_id
+                    url
+                    %s
+                  }
+                }
+              }
+    """ % doc_blocks_query if include_docs else ""
+
     if cursor:
         query = f"""
         query ($cursor: String!) {{
@@ -30,6 +57,7 @@ def fetch_monday_page(cursor=None, include_assets=True):
               id
               name
               {assets_query}
+              {docs_query}
             }}
           }}
         }}
@@ -45,13 +73,17 @@ def fetch_monday_page(cursor=None, include_assets=True):
                 id
                 name
                 {assets_query}
+                {docs_query}
               }}
             }}
           }}
         }}
         """
 
-    headers = {"Authorization": config.MONDAY_API_KEY}
+    headers = {
+        "Authorization": config.MONDAY_API_KEY,
+        "API-Version": "2023-10"
+    }
 
     for attempt in range(3):
         try:
@@ -93,17 +125,19 @@ def fetch_monday_page(cursor=None, include_assets=True):
     return [], None
 
 
-def fetch_monday_items_generator(start_item=1):
+def fetch_monday_items_generator(start_item=1, fetch_assets=True, fetch_docs=False, fetch_docs_content=True):
     cursor = None
     items_processed = 0
 
     while True:
         # Если мы еще далеко от start_item, не запрашиваем assets (быстрая перемотка)
         # +25 с запасом, так как страница может быть неполной
-        include_assets = (items_processed + 25 >= start_item)
+        is_processing_zone = (items_processed + 25 >= start_item)
+        current_include_assets = fetch_assets and is_processing_zone
+        current_include_docs = fetch_docs and is_processing_zone
 
         items, cursor = fetch_monday_page(
-            cursor, include_assets=include_assets)
+            cursor, include_assets=current_include_assets, include_docs=current_include_docs, include_docs_content=fetch_docs_content)
 
         if items:
             logging.info(
